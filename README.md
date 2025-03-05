@@ -70,7 +70,7 @@ Firstly, we need to prepare a kNN graph.  You can use Faiss and other libs.
 #### Step 2. PSP indexing
 
 ```shell
-./test/test_mips_index DATA_PATH KNNG_PATH L R Angle PSP_PATH DIM
+./test/test_mips_index DATA_PATH KNNG_PATH L R Angle M PSP_PATH DIM
 ```
 
 - `DATA_PATH` is the path of the base data in `bin` format.
@@ -78,10 +78,11 @@ Firstly, we need to prepare a kNN graph.  You can use Faiss and other libs.
 - `L` candidate pool size.
 - `R`maximum out-degree.
 - `Angle` minimal angle between edges.
+- `M` IP neighbor.
 - `PSP_PATH` is the path of the generated PSP index.
 - `DIM` dimension of dataset.
 
-#### Step 3. QSA* searching
+#### Step 3. PSP searching
 
 ```shell
 ./test/test_mips_search DATA_PATH QUERY_PATH PSP_PATH searh_L K RESULT_PATH DIM

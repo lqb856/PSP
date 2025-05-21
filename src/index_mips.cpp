@@ -90,7 +90,7 @@ void IndexMips::Load_nn_graph(const char *filename) {
   in.close();
 }
 
-/* select l neighbors candidate from 2-hop*/
+/* select l neighbors candidate from 2-hop */
 void IndexMips::get_neighbors(const unsigned q, const Parameters &parameter,
                              std::vector<Neighbor> &pool, boost::dynamic_bitset<> &flags) {
   // boost::dynamic_bitset<> flags{nd_, 0};
@@ -112,6 +112,8 @@ void IndexMips::get_neighbors(const unsigned q, const Parameters &parameter,
   }
 }
 
+// get neighbours through greedy search using L2 distance.
+// init_ids is assigned randomly.
 void IndexMips::get_neighbors(const float *query, const Parameters &parameter,
                              std::vector<Neighbor> &retset,
                              std::vector<Neighbor> &fullset) {
@@ -166,6 +168,8 @@ void IndexMips::get_neighbors(const float *query, const Parameters &parameter,
   }
 }
 
+// get neighbours through greedy search using L2 distance.
+// init_ids is set with enterpoint.
 void IndexMips::get_refine_neighbors(const unsigned ep, const float *query, const Parameters &parameter,
                              std::vector<Neighbor> &retset,
                              std::vector<Neighbor> &fullset) {
@@ -250,6 +254,8 @@ void IndexMips::get_mips_neighbors(const unsigned ep, const float *query, const 
   unsigned L = parameter.Get<unsigned>("M");
   float threshold = std::cos(40 / 180 * kPi);
   retset.resize(L + 1);
+
+  // Seems not used.
   std::vector<IpNeighbor> ipset;
   ipset.resize(L + 1);
   
@@ -331,7 +337,11 @@ void IndexMips::get_mips_neighbors(const unsigned ep, const float *query, const 
 
 
 
-/* find the entry node */
+/**
+ * find the entry node using L2 distance. 
+ * and compute norm for each vector.
+ * this norm is used for compute cosine distance when perform prune.
+ */
 void IndexMips::init_graph(const Parameters &parameters) {
   float *center = new float[dimension_];
   for (unsigned j = 0; j < dimension_; j++) center[j] = 0;
@@ -354,7 +364,8 @@ void IndexMips::init_graph(const Parameters &parameters) {
   }
 }
 
-
+// prune if two vector is too close to each other in angle.
+// candidate set is nodes in input pool and q's direct neighbour.
 void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
                           const Parameters &parameters, float threshold,
                           SimpleNeighbor *cut_graph_) {
@@ -368,6 +379,7 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
   }
 
   // std::cout << pool.size() << std::endl;
+  // direct neighbours.
   for (unsigned nn = 0; nn < final_graph_[q].size(); nn++) {
     unsigned id = final_graph_[q][nn];
     if (flags[id]) continue;
@@ -392,11 +404,14 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
         occlude = true;
         break;
       }
+      // cos(θ)≈(a + b - c) / (2 * \sqrt{a * b})
+      // cos(θ) > threshold means two vector is angle-approximate.
       float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
                                      data_ + dimension_ * (size_t)p.id,
                                      (unsigned)dimension_);
       float cos_ij = (p.distance + result[t].distance - djk) / 2 /
                      sqrt(p.distance * result[t].distance);
+      // prune if angle is too small.
       if (cos_ij > threshold) {
         occlude = true;
         break;
@@ -415,6 +430,8 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
   }
 }
 
+// makesure node is interconnected.
+// prune is neighbour num exceeds range after insert.
 void IndexMips::InterInsert(unsigned n, unsigned range, float threshold,
                            std::vector<std::mutex> &locks,
                            SimpleNeighbor *cut_graph_) {
@@ -513,6 +530,7 @@ void IndexMips::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
     float angle = parameters.Get<float>("A");
     float threshold = std::cos(angle / 180 * kPi);
 
+    // 1. using neighbours in 2-hops to prune and fill cut_graph
     omp_set_num_threads(48);
     #pragma omp parallel
     {
@@ -524,12 +542,15 @@ void IndexMips::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
             flags.reset();
             pool.clear();
             tmp.clear();
+            // get 2-hop neighbours.
             get_neighbors(n, parameters, pool, flags);
+            // prune and fill cut_graph_
             sync_prune(n, pool, parameters, threshold, cut_graph_);
         }
     }
     std::cout << "sync prune done!" << std::endl;
 
+    // 2. interconnect each nodes, prune if necessary.
     omp_set_num_threads(48);
     #pragma omp parallel
     {
@@ -540,6 +561,7 @@ void IndexMips::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
     }
     std::cout << "interinsert done!" << std::endl;
 
+    // 3. fill empty slot with mips-search neighbours.
     omp_set_num_threads(48);
     #pragma omp parallel
     {
@@ -548,6 +570,7 @@ void IndexMips::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
         #pragma omp for schedule(dynamic, 64) 
         for (unsigned n = 0; n < nd_; ++n) {
             ip_pool.clear();
+            // TODO: get to knnow how many mips neighbours is inserted. is this operation usefull?
             get_mips_neighbors(n, data_ + dimension_ * n, parameters, ip_pool);
             add_mips_neighbors(n, parameters, ip_pool, cut_graph_);
         }
@@ -570,6 +593,7 @@ void IndexMips::Build(size_t n, const float *data,
   
   final_graph_.resize(nd_);
 
+  // cpoy cut_graph_ to final_graph_
   for (size_t i = 0; i < nd_; i++) {
     SimpleNeighbor *pool = cut_graph_ + i * (size_t)range;
     unsigned pool_size = 0;
@@ -586,6 +610,7 @@ void IndexMips::Build(size_t n, const float *data,
     }
   }
 
+  // repair connectivity and setup enterpoint eps_
   DFS_expand(parameters);
 
 
@@ -611,6 +636,7 @@ void IndexMips::Search(const float *query, const float *x, size_t K,
 }
 
 
+// search with init_nodes(SN)
 int IndexMips::Search_Mips_IP_Cal(const float *query, const float *x, size_t K,
                       const Parameters &parameters, unsigned *indices, std::vector<int> &init_nodes) {
   const unsigned L = parameters.Get<unsigned>("L_search");
@@ -894,6 +920,7 @@ void IndexMips::DFS_expand(const Parameters &parameter) {
   unsigned n_try = parameter.Get<unsigned>("n_try");
   unsigned range = parameter.Get<unsigned>("R");
 
+  // set up enterpoint randomly.
   std::vector<unsigned> ids(nd_);
   for(unsigned i=0; i<nd_; i++){
     ids[i]=i;
@@ -902,6 +929,7 @@ void IndexMips::DFS_expand(const Parameters &parameter) {
   for(unsigned i=0; i<n_try; i++){
     eps_.push_back(ids[i]);
   }
+
 #pragma omp parallel for
   for(unsigned i=0; i<n_try; i++){
     unsigned rootid = eps_[i];

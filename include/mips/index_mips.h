@@ -54,7 +54,7 @@ namespace efanna2e {
       typedef std::vector<nhood> KNNGraph;
 
       CompactGraph final_graph_;
-      Index *initializer_;
+      Index *initializer_; // not used
 
       void init_graph(const Parameters &parameters);
       void get_neighbors(const float *query, const Parameters &parameter,
@@ -94,7 +94,7 @@ namespace efanna2e {
       void DFS_expand(const Parameters &parameter);
 
     private:
-      unsigned width;
+      unsigned width; // 
       unsigned ep_; //not in use
       std::vector<unsigned> eps_;
       std::vector<std::mutex> locks;

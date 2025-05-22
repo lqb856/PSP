@@ -18,8 +18,8 @@ int main(int argc, char** argv) {
   float A = (float)atof(argv[5]);
   unsigned M = (unsigned)atoi(argv[6]);
 
-  std::cout << "L = " << L << ", ";
-  std::cout << "R = " << R << ", ";
+  std::cout << "L = " << L << ", "; // candidate set size
+  std::cout << "R = " << R << ", "; // neighbor size
   std::cout << "Angle = " << A << std::endl;
   std::cout << "KNNG = " << nn_graph_path << std::endl;
   efanna2e::IndexRandom init_index(dim, points_num);

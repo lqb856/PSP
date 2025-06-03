@@ -2,6 +2,7 @@
 
 #include <boost/dynamic_bitset.hpp>
 #include <cassert>
+#include <cfloat>
 #include <sstream>
 #include <stack>
 #include <string>
@@ -15,6 +16,36 @@
 
 
 namespace efanna2e {
+
+  struct StateTable {
+    double norm_avg_ = 0.0;
+    double norm_var_ = 0.0;
+    double norm_max_ = 0.0;
+    double norm_min_ = FLT_MAX;
+    int max_degree_ = 0;
+    int min_degree_ = 1e6;
+    int avg_degree_ = 0;
+  
+    void reset() {
+      norm_avg_ = 0.0;
+      norm_max_ = 0.0;
+      norm_min_ = FLT_MAX;
+      norm_var_ = 0.0;
+      max_degree_ = 0;
+      min_degree_ = 1e6;
+      avg_degree_ = 0;
+    }
+  
+    void print() {
+      std::cout << "norm avg: " << norm_avg_ << std::endl;
+      std::cout << "norm var: " << norm_var_ << std::endl;
+      std::cout << "norm max: " << norm_max_ << std::endl;
+      std::cout << "norm min: " << norm_min_ << std::endl;
+      std::cout << "max degree: " << max_degree_ << std::endl;
+      std::cout << "min degree: " << min_degree_ << std::endl;
+      std::cout << "avg degree: " << avg_degree_ << std::endl;
+    }
+  };
 
   class IndexMips : public Index {
     public:
@@ -105,6 +136,9 @@ namespace efanna2e {
       KNNGraph nnd_graph;
       std::vector<float> norms_;
       std::vector<int> init_points_;
+
+    public:
+      static StateTable ST;
   };
 
 }

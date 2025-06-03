@@ -1,11 +1,14 @@
 #include "mips/index_mips.h"
 
+#include <iomanip>
+#include <map>
 #include <omp.h>
 #include <bitset>
 #include <chrono>
 #include <cmath>
 #include <queue>
 #include <boost/dynamic_bitset.hpp>
+#include <vector>
 
 #include "ssg/parameters.h"
 
@@ -14,9 +17,12 @@ constexpr double kPi = 3.14159265358979323846264;
 namespace efanna2e {
 #define _CONTROL_NUM 100
 
+StateTable efanna2e::IndexMips::ST;
+
 IndexMips::IndexMips(const size_t dimension, const size_t n, Metric m,
                      Index *initializer)
     : Index(dimension, n, m), initializer_(initializer) {
+      ST.reset();
     }
 
 IndexMips::~IndexMips() {}
@@ -45,24 +51,109 @@ void IndexMips::Load(const char *filename) {
   in.read((char *)&n_ep, sizeof(unsigned));
   eps_.resize(n_ep);
   in.read((char *)eps_.data(), n_ep*sizeof(unsigned));
+  std::cout << "num ep: " << n_ep << std::endl;
+
+  std::vector<int> in_degrees(nd_, 0);
+
   unsigned cc = 0;
   while (!in.eof()) {
     unsigned k;
     in.read((char *)&k, sizeof(unsigned));
+
+    if (k < ST.min_degree_) {
+      ST.min_degree_ = k;
+    }
+    if (k > ST.max_degree_) {
+      ST.max_degree_ = k;
+    }
+
     if (in.eof()) break;
     cc += k;
     std::vector<unsigned> tmp(k);
     in.read((char *)tmp.data(), k * sizeof(unsigned));
     final_graph_.push_back(tmp);
+
+    for (unsigned j = 0; j < k; j++) {
+      in_degrees[tmp[j]]++;
+    }
   }
-  cc /= nd_;
-  DistanceFastL2 *norm_dis = (DistanceFastL2 *)distance_;
-  norms_.resize(nd_);
-  for (size_t i = 0; i < nd_; i++) {
-    norms_[i] = std::sqrt(norm_dis->norm(data_ + dimension_ * i, dimension_)) ;
+  if (nd_ != final_graph_.size()) {
+    std::cerr << "num points: " << nd_ << " points has out neighbor: " << final_graph_.size() << std::endl;
+    std::cerr << "zero-degree point exists!";
+    exit(0);
   }
 
-  std::cerr << "Average Degree = " << cc << std::endl;
+  std::cout << "checking in-degree..." << std::endl;
+  std::vector<int> in_degrees_idx(nd_, 0);
+  // 首先将节点索引按入度排序
+  std::iota(in_degrees_idx.begin(), in_degrees_idx.end(), 0);
+  std::sort(in_degrees_idx.begin(), in_degrees_idx.end(), 
+      [&in_degrees](int a, int b) { return in_degrees[a] < in_degrees[b]; });
+
+  // 计算各百分位位置
+  auto get_percentile = [&](double p) {
+      size_t pos = p * (nd_ - 1);
+      return in_degrees[in_degrees_idx[pos]];
+  };
+  std::cout << "In-degree distribution percentiles:\n"
+            << " 95%: " << get_percentile(0.95) << "\n"
+            << " 90%: " << get_percentile(0.90) << "\n" 
+            << " 80%: " << get_percentile(0.80) << "\n"
+            << " 50%: " << get_percentile(0.50) << std::endl;
+
+  std::map<int, int> hist;
+  for (int d : in_degrees) hist[d]++;
+  std::cout << "\nIn-degree histogram (scaled):\n";
+
+  // 找出最大频次用于归一化
+  int max_count = 0;
+  double sum = 0, sq_sum = 0;
+  for (auto& [d, cnt] : hist) {
+      max_count = std::max(max_count, cnt);
+      sum += d * cnt;
+      sq_sum += d * d * cnt;
+  }
+  
+  double mean = sum / nd_;
+  double variance = (sq_sum - sum*mean)/nd_;  // 更稳定的计算方式
+  double stdev = (nd_ > 1) ? sqrt(variance) : 0.0;
+  
+  std::cout << "Statistics:\n"
+            << "Mean: " << mean << "\n"
+            << "Std Dev: " << stdev << "\n"
+            << "Max Count: " << max_count << std::endl;
+  
+  // 动态计算缩放因子（确保最大高度为50字符）
+  const int max_bar_length = 50;
+  float scale = (max_count > 0) ? float(max_bar_length) / max_count : 1.0f;
+  
+  // 输出带动态缩放的直方图
+  for (auto& [degree, count] : hist) {
+      int bar_length = std::max(1, static_cast<int>(count * scale)); // 保证最小显示1个*
+      std::cout << std::setw(4) << degree << ": " 
+                << std::string(bar_length, '*') 
+                << " (" << count << ")\n";
+  }
+
+  cc /= nd_;
+  ST.avg_degree_ = cc;
+  DistanceFastL2 *norm_dis = (DistanceFastL2 *)distance_;
+  norms_.resize(nd_);
+  double norm_sum = 0.0;
+  for (size_t i = 0; i < nd_; i++) {
+    norms_[i] = std::sqrt(norm_dis->norm(data_ + dimension_ * i, dimension_));
+    norm_sum += norms_[i];
+    if (norms_[i] > ST.norm_max_) ST.norm_max_ = norms_[i];
+    if (norms_[i] < ST.norm_min_) ST.norm_min_ = norms_[i];
+  }
+
+  ST.norm_avg_ = norm_sum / nd_;
+  for (int i = 0; i < nd_; i++) {
+    ST.norm_var_ += (norms_[i] - ST.norm_avg_) * (norms_[i] - ST.norm_avg_);
+  }
+  ST.norm_var_ /= nd_;
+ 
+  ST.print();
 }
 
 void IndexMips::Load_nn_graph(const char *filename) {
@@ -72,10 +163,12 @@ void IndexMips::Load_nn_graph(const char *filename) {
   std::cout << std::string(filename) << std::endl;
   in.read((char *)&k, sizeof(unsigned));
   std::cout << k << std::endl;
+
   in.seekg(0, std::ios::end);
   std::ios::pos_type ss = in.tellg();
   size_t fsize = (size_t)ss;
   size_t num = (unsigned)(fsize / (k + 1) / 4);
+
   in.seekg(0, std::ios::beg);
   std::cout << num << std::endl;
   final_graph_.resize(num);
@@ -338,25 +431,10 @@ void IndexMips::get_mips_neighbors(const unsigned ep, const float *query, const 
 
 
 /**
- * find the entry node using L2 distance. 
- * and compute norm for each vector.
+ * Compute norm for each vector.
  * this norm is used for compute cosine distance when perform prune.
  */
 void IndexMips::init_graph(const Parameters &parameters) {
-  float *center = new float[dimension_];
-  for (unsigned j = 0; j < dimension_; j++) center[j] = 0;
-  for (unsigned i = 0; i < nd_; i++) {
-    for (unsigned j = 0; j < dimension_; j++) {
-      center[j] += data_[i * dimension_ + j];
-    }
-  }
-  for (unsigned j = 0; j < dimension_; j++) {
-    center[j] /= nd_;
-  }
-  std::vector<Neighbor> tmp, pool;
-  get_neighbors(center, parameters, tmp, pool);
-  ep_ = tmp[0].id;  
-  std::cout << ep_ << std::endl;
   DistanceFastL2 *norm_dis = (DistanceFastL2 *)distance_;
   norms_.resize(nd_);
   for (size_t i = 0; i < nd_; i++) {
@@ -404,8 +482,8 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
         occlude = true;
         break;
       }
-      // cos(θ)≈(a + b - c) / (2 * \sqrt{a * b})
-      // cos(θ) > threshold means two vector is angle-approximate.
+      // // cos(θ)≈(a + b - c) / (2 * \sqrt{a * b})
+      // // cos(θ) > threshold means two vector is angle-approximate.
       float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
                                      data_ + dimension_ * (size_t)p.id,
                                      (unsigned)dimension_);
@@ -416,6 +494,14 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
         occlude = true;
         break;
       }
+
+      // HNSW
+      // float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
+      //                               data_ + dimension_ * (size_t)p.id,
+      //                               (unsigned)dimension_);
+      // if (djk < p.distance) {
+      //   occlude = true;
+      // }
     }
     if (!occlude) result.push_back(p);
   }
@@ -482,6 +568,13 @@ void IndexMips::InterInsert(unsigned n, unsigned range, float threshold,
             occlude = true;
             break;
           }
+          // HNSW
+          // float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
+          //                               data_ + dimension_ * (size_t)p.id,
+          //                               (unsigned)dimension_);
+          // if (djk < p.distance) {
+          //   occlude = true;
+          // }
         }
         if (!occlude) result.push_back(p);
       }
@@ -584,9 +677,11 @@ void IndexMips::Build(size_t n, const float *data,
   unsigned range = parameters.Get<unsigned>("R");
   Load_nn_graph(nn_graph_path.c_str());
   std::cout <<"Load nn graph" << std::endl;
+  
   data_ = data;
   init_graph(parameters);
   std::cout << "Init done" << std::endl;
+
   SimpleNeighbor *cut_graph_ = new SimpleNeighbor[nd_ * (size_t)range];
   Link(parameters, cut_graph_);
   std::cout << "Link done" << std::endl;

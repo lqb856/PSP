@@ -83,57 +83,57 @@ void IndexMips::Load(const char *filename) {
     exit(0);
   }
 
-  std::cout << "checking in-degree..." << std::endl;
-  std::vector<int> in_degrees_idx(nd_, 0);
-  // 首先将节点索引按入度排序
-  std::iota(in_degrees_idx.begin(), in_degrees_idx.end(), 0);
-  std::sort(in_degrees_idx.begin(), in_degrees_idx.end(), 
-      [&in_degrees](int a, int b) { return in_degrees[a] < in_degrees[b]; });
+  // std::cout << "checking in-degree..." << std::endl;
+  // std::vector<int> in_degrees_idx(nd_, 0);
+  // // 首先将节点索引按入度排序
+  // std::iota(in_degrees_idx.begin(), in_degrees_idx.end(), 0);
+  // std::sort(in_degrees_idx.begin(), in_degrees_idx.end(), 
+  //     [&in_degrees](int a, int b) { return in_degrees[a] < in_degrees[b]; });
 
-  // 计算各百分位位置
-  auto get_percentile = [&](double p) {
-      size_t pos = p * (nd_ - 1);
-      return in_degrees[in_degrees_idx[pos]];
-  };
-  std::cout << "In-degree distribution percentiles:\n"
-            << " 95%: " << get_percentile(0.95) << "\n"
-            << " 90%: " << get_percentile(0.90) << "\n" 
-            << " 80%: " << get_percentile(0.80) << "\n"
-            << " 50%: " << get_percentile(0.50) << std::endl;
+  // // 计算各百分位位置
+  // auto get_percentile = [&](double p) {
+  //     size_t pos = p * (nd_ - 1);
+  //     return in_degrees[in_degrees_idx[pos]];
+  // };
+  // std::cout << "In-degree distribution percentiles:\n"
+  //           << " 95%: " << get_percentile(0.95) << "\n"
+  //           << " 90%: " << get_percentile(0.90) << "\n" 
+  //           << " 80%: " << get_percentile(0.80) << "\n"
+  //           << " 50%: " << get_percentile(0.50) << std::endl;
 
-  std::map<int, int> hist;
-  for (int d : in_degrees) hist[d]++;
-  std::cout << "\nIn-degree histogram (scaled):\n";
+  // std::map<int, int> hist;
+  // for (int d : in_degrees) hist[d]++;
+  // std::cout << "\nIn-degree histogram (scaled):\n";
 
   // 找出最大频次用于归一化
-  int max_count = 0;
-  double sum = 0, sq_sum = 0;
-  for (auto& [d, cnt] : hist) {
-      max_count = std::max(max_count, cnt);
-      sum += d * cnt;
-      sq_sum += d * d * cnt;
-  }
+  // int max_count = 0;
+  // double sum = 0, sq_sum = 0;
+  // for (auto& [d, cnt] : hist) {
+  //     max_count = std::max(max_count, cnt);
+  //     sum += d * cnt;
+  //     sq_sum += d * d * cnt;
+  // }
   
-  double mean = sum / nd_;
-  double variance = (sq_sum - sum*mean)/nd_;  // 更稳定的计算方式
-  double stdev = (nd_ > 1) ? sqrt(variance) : 0.0;
+  // double mean = sum / nd_;
+  // double variance = (sq_sum - sum*mean)/nd_;  // 更稳定的计算方式
+  // double stdev = (nd_ > 1) ? sqrt(variance) : 0.0;
   
-  std::cout << "Statistics:\n"
-            << "Mean: " << mean << "\n"
-            << "Std Dev: " << stdev << "\n"
-            << "Max Count: " << max_count << std::endl;
+  // std::cout << "Statistics:\n"
+  //           << "Mean: " << mean << "\n"
+  //           << "Std Dev: " << stdev << "\n"
+  //           << "Max Count: " << max_count << std::endl;
   
-  // 动态计算缩放因子（确保最大高度为50字符）
-  const int max_bar_length = 50;
-  float scale = (max_count > 0) ? float(max_bar_length) / max_count : 1.0f;
+  // // 动态计算缩放因子（确保最大高度为50字符）
+  // const int max_bar_length = 50;
+  // float scale = (max_count > 0) ? float(max_bar_length) / max_count : 1.0f;
   
-  // 输出带动态缩放的直方图
-  for (auto& [degree, count] : hist) {
-      int bar_length = std::max(1, static_cast<int>(count * scale)); // 保证最小显示1个*
-      std::cout << std::setw(4) << degree << ": " 
-                << std::string(bar_length, '*') 
-                << " (" << count << ")\n";
-  }
+  // // 输出带动态缩放的直方图
+  // for (auto& [degree, count] : hist) {
+  //     int bar_length = std::max(1, static_cast<int>(count * scale)); // 保证最小显示1个*
+  //     std::cout << std::setw(4) << degree << ": " 
+  //               << std::string(bar_length, '*') 
+  //               << " (" << count << ")\n";
+  // }
 
   cc /= nd_;
   ST.avg_degree_ = cc;
@@ -484,24 +484,24 @@ void IndexMips::sync_prune(unsigned q, std::vector<Neighbor> &pool,
       }
       // // cos(θ)≈(a + b - c) / (2 * \sqrt{a * b})
       // // cos(θ) > threshold means two vector is angle-approximate.
-      float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
-                                     data_ + dimension_ * (size_t)p.id,
-                                     (unsigned)dimension_);
-      float cos_ij = (p.distance + result[t].distance - djk) / 2 /
-                     sqrt(p.distance * result[t].distance);
-      // prune if angle is too small.
-      if (cos_ij > threshold) {
-        occlude = true;
-        break;
-      }
+      // float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
+      //                                data_ + dimension_ * (size_t)p.id,
+      //                                (unsigned)dimension_);
+      // float cos_ij = (p.distance + result[t].distance - djk) / 2 /
+      //                sqrt(p.distance * result[t].distance);
+      // // prune if angle is too small.
+      // if (cos_ij > threshold) {
+      //   occlude = true;
+      //   break;
+      // }
 
       // HNSW
-      // float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
-      //                               data_ + dimension_ * (size_t)p.id,
-      //                               (unsigned)dimension_);
-      // if (djk < p.distance) {
-      //   occlude = true;
-      // }
+      float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
+                                    data_ + dimension_ * (size_t)p.id,
+                                    (unsigned)dimension_);
+      if (djk < p.distance) {
+        occlude = true;
+      }
     }
     if (!occlude) result.push_back(p);
   }
@@ -559,22 +559,23 @@ void IndexMips::InterInsert(unsigned n, unsigned range, float threshold,
             occlude = true;
             break;
           }
-          float djk = distance_->compare(
-              data_ + dimension_ * (size_t)result[t].id,
-              data_ + dimension_ * (size_t)p.id, (unsigned)dimension_);
-          float cos_ij = (p.distance + result[t].distance - djk) / 2 /
-                         sqrt(p.distance * result[t].distance);
-          if (cos_ij > threshold) {
-            occlude = true;
-            break;
-          }
-          // HNSW
-          // float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
-          //                               data_ + dimension_ * (size_t)p.id,
-          //                               (unsigned)dimension_);
-          // if (djk < p.distance) {
+          // float djk = distance_->compare(
+          //     data_ + dimension_ * (size_t)result[t].id,
+          //     data_ + dimension_ * (size_t)p.id, (unsigned)dimension_);
+          // float cos_ij = (p.distance + result[t].distance - djk) / 2 /
+          //                sqrt(p.distance * result[t].distance);
+          // if (cos_ij > threshold) {
           //   occlude = true;
+          //   break;
           // }
+
+          // HNSW
+          float djk = distance_->compare(data_ + dimension_ * (size_t)result[t].id,
+                                        data_ + dimension_ * (size_t)p.id,
+                                        (unsigned)dimension_);
+          if (djk < p.distance) {
+            occlude = true;
+          }
         }
         if (!occlude) result.push_back(p);
       }
@@ -637,6 +638,10 @@ void IndexMips::Link(const Parameters &parameters, SimpleNeighbor *cut_graph_) {
             tmp.clear();
             // get 2-hop neighbours.
             get_neighbors(n, parameters, pool, flags);
+
+            // get neighbors with greedy search.
+            // get_neighbors(data_ + n * dimension_, parameters, pool, tmp);
+
             // prune and fill cut_graph_
             sync_prune(n, pool, parameters, threshold, cut_graph_);
         }
